@@ -1,0 +1,45 @@
+@inject PermisoService Permisos
+@{
+    ViewData["Title"] = "Inicio";
+    var menu = await Permisos.MenuAsync();
+    var resumen = (List<RestauranteControl.Controllers.MesaResumen>)ViewBag.Mesas;
+    var empresa = ViewData["Empresa"] as Empresa;
+}
+<div class="mb-4">
+    <h1 class="page-title">Panel de @empresa?.Nombre</h1>
+    <p class="page-subtitle">Bienvenido, @User.Identity?.Name. Resumen de la operación y accesos rápidos.</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3"><div class="card section-card stat-card"><div class="text-muted small">Órdenes abiertas</div><div class="fs-2 fw-bold">@ViewBag.OrdenesAbiertas</div></div></div>
+    <div class="col-6 col-xl-3"><div class="card section-card stat-card"><div class="text-muted small">Platillos en cocina</div><div class="fs-2 fw-bold">@ViewBag.PlatillosEnCocina</div></div></div>
+    <div class="col-6 col-xl-3"><div class="card section-card stat-card"><div class="text-muted small">Reservas de hoy</div><div class="fs-2 fw-bold">@ViewBag.ReservasHoy</div></div></div>
+    <div class="col-6 col-xl-3"><div class="card section-card stat-card"><div class="text-muted small">Ventas de hoy</div><div class="fs-2 fw-bold">@Html.Dinero((decimal)ViewBag.VentasHoy)</div></div></div>
+</div>
+
+<div class="card section-card mb-4">
+    <h5 class="mb-3">Mesas por estado</h5>
+    <div class="d-flex flex-wrap gap-3">
+        @foreach (var r in resumen)
+        {
+            <span class="badge fs-6" style="background:@r.Color">@r.Estado: @r.Cantidad</span>
+        }
+    </div>
+</div>
+
+<div class="row g-3">
+    @foreach (var m in menu)
+    {
+        <div class="col-sm-6 col-xl-3">
+            <a class="quick-card" href="@Url.Action("Index", m.Controlador)">
+                <div class="card section-card h-100">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card"><div class="icon"><i class="bi @m.Icono"></i></div></div>
+                        <h5 class="mb-0">@m.Nombre</h5>
+                        <i class="bi bi-chevron-right ms-auto text-muted"></i>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
+</div>

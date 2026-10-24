@@ -1,0 +1,471 @@
+@model Orden
+@inject PermisoService Permisos
+@{
+    ViewData["Title"] = "Orden #" + Model.Id;
+    var productos = (List<Producto>)ViewBag.Productos;
+    var combos = (List<Producto>)ViewBag.Combos;
+    var ofertas = (List<Promocion>)ViewBag.Ofertas;
+    var otras = (List<Orden>)ViewBag.OtrasCuentas;
+    var codigoListo = (string)ViewBag.EstadoListo;
+    var codigoInicial = (string)ViewBag.EstadoInicial;
+    var abierta = !Model.Cerrada && !Model.Anulada;
+    var puedeEditar = abierta && await Permisos.PuedeAsync(Modulos.Ordenes, Acciones.Editar);
+    var puedeAnular = abierta && await Permisos.PuedeAsync(Modulos.Ordenes, Acciones.Eliminar);
+    var puedeCobrar = abierta && await Permisos.PuedeAsync(Modulos.Caja, Acciones.Ver);
+    var empresa = ViewData["Empresa"] as Empresa;
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi bi-receipt me-2"></i>Orden #@Model.Id</h1>
+        <p class="page-subtitle">
+            @Model.TipoOrden?.Nombre
+            @if (Model.Mesa != null)
+            {
+                <text>· Mesa @Model.Mesa.Numero</text>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Cliente))
+            {
+                <text>· @Model.Cliente</text>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.DireccionEntrega))
+            {
+                <text>· @Model.DireccionEntrega</text>
+            }
+            · Abierta @Model.Fecha.FechaHora() por @Model.Usuario?.Nombre
+        </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="bi bi-arrow-left me-1"></i>Órdenes</a>
+
+        @if (puedeCobrar)
+        {
+            <a class="btn btn-success" asp-controller="Caja" asp-action="Index"><i class="bi bi-cash-stack me-1"></i>Ir a caja</a>
+        }
+        @if (Model.Cerrada)
+        {
+            <a class="btn btn-outline-primary" asp-controller="Caja" asp-action="Comprobante" asp-route-id="@Model.Id"><i class="bi bi-printer me-1"></i>Comprobante</a>
+        }
+        @if (puedeAnular)
+        {
+            <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#anularModal"><i class="bi bi-x-octagon me-1"></i>Anular</button>
+        }
+    </div>
+</div>
+
+@if (Model.Anulada)
+{
+    <div class="alert alert-danger">Orden anulada. Motivo: @Model.MotivoAnulacion</div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card table-card mb-3">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead><tr><th style="width: 50px;"></th><th>Platillo</th><th>Cant.</th><th>Precio</th><th>Importe</th><th>Estado</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var d in Model.Detalles.OrderBy(x => x.Id))
+                        {
+                            <tr>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(d.Producto?.ImagenUrl))
+                                    {
+                                        <img src="@d.Producto.ImagenUrl" alt="@d.Producto.Nombre" class="rounded" style="width: 40px; height: 40px; object-fit: cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px;">
+                                            <i class="bi bi-image fs-6"></i>
+                                        </div>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@d.Producto?.Nombre</div>
+                                    @if (!string.IsNullOrWhiteSpace(d.Nota))
+                                    {
+                                        <div class="small text-muted"><i class="bi bi-chat-left-text me-1"></i>@d.Nota</div>
+                                    }
+                                </td>
+                                <td>@d.Cantidad</td>
+                                <td>@Html.Dinero(d.PrecioUnitario)</td>
+                                <td>@Html.Dinero(d.Cantidad * d.PrecioUnitario)</td>
+                                <td><span class="badge" style="background:@d.EstadoOrden?.Color">@d.EstadoOrden?.Nombre</span></td>
+                                <td class="text-end text-nowrap">
+                                    @if (puedeEditar && otras.Any())
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#moverModal"
+                                                data-detalle="@d.Id" data-cantidad="@d.Cantidad" data-nombre="@d.Producto?.Nombre" title="Mover a otra cuenta de la mesa">
+                                            <i class="bi bi-arrow-left-right"></i>
+                                        </button>
+                                    }
+                                    @if (puedeEditar && d.EstadoOrden?.Codigo == codigoListo)
+                                    {
+                                        <form asp-action="Entregar" method="post" class="d-inline">
+                                            <input type="hidden" name="detalleId" value="@d.Id" /><input type="hidden" name="ordenId" value="@Model.Id" />
+                                            <button class="btn btn-sm btn-outline-success" title="Marcar entregado"><i class="bi bi-check2-circle"></i> Entregar</button>
+                                        </form>
+                                    }
+                                    @if (puedeEditar && d.EstadoOrden?.Codigo == codigoInicial)
+                                    {
+                                        <form asp-action="QuitarItem" method="post" class="d-inline" onsubmit="return confirm('¿Quitar este platillo?');">
+                                            <input type="hidden" name="detalleId" value="@d.Id" /><input type="hidden" name="ordenId" value="@Model.Id" />
+                                            <button class="btn btn-sm btn-outline-danger" title="Quitar"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.Detalles.Any())
+                        {
+                            <tr><td colspan="7"><div class="empty-state"><i class="bi bi-egg-fried"></i>Aún no hay platillos en esta orden.</div></td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (puedeEditar)
+        {
+            <div class="card section-card">
+                <h5 class="mb-3">
+                    <i class="bi bi-plus-circle me-2"></i>
+                    Agregar a la orden
+                </h5>
+
+                <!-- Pestañas -->
+                <ul class="nav nav-pills mb-3" id="productosTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="platillos-tab" data-bs-toggle="pill" data-bs-target="#platillos" type="button" role="tab">
+                            <i class="bi bi-egg-fried me-1"></i> Platillos
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="combos-tab" data-bs-toggle="pill" data-bs-target="#combos" type="button" role="tab">
+                            <i class="bi bi-box-seam me-1"></i> Combos (@combos.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="ofertas-tab" data-bs-toggle="pill" data-bs-target="#ofertas" type="button" role="tab">
+                            <i class="bi bi-tags me-1"></i> Ofertas (@ofertas.Count)
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- PESTAÑA DE PLATILLOS -->
+                    <div class="tab-pane fade show active" id="platillos" role="tabpanel">
+                        <form asp-action="AgregarItem" method="post" class="row g-3">
+                            <input type="hidden" name="ordenId" value="@Model.Id" />
+
+                            <div class="col-md-4">
+                                <label class="form-label">Categoría</label>
+                                <select class="form-select" id="filtroCategoria">
+                                    <option value="">Todas las categorías</option>
+                                    @foreach (var nombreCategoria in productos.Select(p => p.CategoriaProducto!.Nombre).Distinct())
+                                    {
+                                        <option value="@nombreCategoria">@nombreCategoria</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-md-8">
+                                <label class="form-label">Platillo</label>
+                                <select class="form-select" name="productoId" id="selPlatillo">
+                                    <option value="">-- Seleccionar platillo --</option>
+                                    @foreach (var grupo in productos.GroupBy(p => p.CategoriaProducto!.Nombre))
+                                    {
+                                        <optgroup label="@grupo.Key">
+                                            @foreach (var p in grupo)
+                                            {
+                                                <option value="@p.Id">@p.Nombre · @Html.Dinero(p.Precio)</option>
+                                            }
+                                        </optgroup>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label">Cantidad</label>
+                                <input class="form-control" type="number" name="cantidad" min="1" value="1" required />
+                            </div>
+
+                            <div class="col-md-10">
+                                <label class="form-label">Nota para cocina</label>
+                                <input class="form-control" name="nota" maxlength="300" />
+                            </div>
+
+                            <div class="col-12 d-flex gap-2 mt-3">
+                                <button type="submit" name="enviarACocina" value="false" class="btn btn-outline-primary flex-fill">
+                                    <i class="bi bi-save me-1"></i> Guardar en orden
+                                </button>
+                                <button type="submit" name="enviarACocina" value="true" class="btn btn-success flex-fill">
+                                    <i class="bi bi-send me-1"></i> Guardar y enviar a cocina
+                                </button>
+                            </div>
+                        </form>
+
+                        @if (!productos.Any())
+                        {
+                            <div class="alert alert-light mt-3 mb-0">No hay platillos disponibles.</div>
+                        }
+                    </div>
+
+                    <!-- PESTAÑA DE COMBOS -->
+                    <div class="tab-pane fade" id="combos" role="tabpanel">
+                        @if (combos.Any())
+                        {
+                            <div class="row g-3">
+                                @foreach (var combo in combos)
+                                {
+                                    <div class="col-md-6">
+                                        <div class="border rounded-3 p-3 h-100 d-flex flex-column justify-content-between">
+                                            <div>
+                                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        @if (!string.IsNullOrEmpty(combo.ImagenUrl))
+                                                        {
+                                                            <img src="@combo.ImagenUrl" alt="@combo.Nombre" class="rounded" style="width: 45px; height: 45px; object-fit: cover;" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width: 45px; height: 45px;">
+                                                                <i class="bi bi-box-seam fs-5"></i>
+                                                            </div>
+                                                        }
+                                                        <div>
+                                                            <h6 class="mb-1">@combo.Nombre</h6>
+                                                            <div class="text-muted small">
+                                                                @(combo.Descripcion ?? "Combo del restaurante")
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <span class="fw-bold text-success text-nowrap">
+                                                        @Html.Dinero(combo.Precio)
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <form asp-action="AgregarItem" method="post" class="mt-3">
+                                                <input type="hidden" name="ordenId" value="@Model.Id" />
+                                                <input type="hidden" name="productoId" value="@combo.Id" />
+                                                <input type="hidden" name="cantidad" value="1" />
+
+                                                <div class="d-flex gap-1">
+                                                    <button type="submit" name="enviarACocina" value="false" class="btn btn-outline-primary btn-sm flex-fill" title="Solo guardar en la orden">
+                                                        <i class="bi bi-save me-1"></i> Guardar
+                                                    </button>
+                                                    <button type="submit" name="enviarACocina" value="true" class="btn btn-success btn-sm flex-fill" title="Guardar y mandar a cocina">
+                                                        <i class="bi bi-send me-1"></i> Enviar
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-light mb-0">
+                                <i class="bi bi-info-circle me-1"></i> No hay combos disponibles actualmente.
+                            </div>
+                        }
+                    </div>
+
+                    <!-- PESTAÑA DE OFERTAS -->
+                    <div class="tab-pane fade" id="ofertas" role="tabpanel">
+                        @if (ofertas.Any())
+                        {
+                            <div class="row g-3">
+                                @foreach (var oferta in ofertas)
+                                {
+                                    <div class="col-md-6">
+                                        <div class="border rounded-3 p-3 h-100">
+                                            <h6 class="mb-2">
+                                                <i class="bi bi-tags text-warning me-1"></i> @oferta.Nombre
+                                            </h6>
+
+                                            @if (!string.IsNullOrWhiteSpace(oferta.Descripcion))
+                                            {
+                                                <p class="small text-muted mb-2">@oferta.Descripcion</p>
+                                            }
+
+                                            <div class="small fw-semibold mb-1">Productos incluidos:</div>
+                                            <ul class="small mb-2">
+                                                @foreach (var detalle in oferta.Detalles)
+                                                {
+                                                    <li>@detalle.Cantidad x @detalle.Producto?.Nombre</li>
+                                                }
+                                            </ul>
+
+                                            <div class="small text-muted">
+                                                Vigencia: @oferta.VigenciaDesde.ToString("dd/MM/yyyy") - @oferta.VigenciaHasta.ToString("dd/MM/yyyy")
+                                            </div>
+
+                                            <div class="alert alert-info small mt-3 mb-0">
+                                                Agrega los productos indicados en la pestaña Platillos. El sistema aplicará el descuento automáticamente.
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-light mb-0">
+                                <i class="bi bi-info-circle me-1"></i> No hay ofertas vigentes actualmente.
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card section-card">
+            <h5 class="mb-3">Resumen de la cuenta</h5>
+            @foreach (var l in CuentaHelper.Armar(Model))
+            {
+                <div class="d-flex justify-content-between @(l.EsCombo ? "fw-semibold" : "")">
+                    <span>
+                        @if (l.EsCombo)
+                        {
+                            <i class="bi bi-tags me-1 text-success"></i>
+                        }@l.Cantidad x @l.Descripcion
+                    </span>
+                    <span>@Html.Dinero(l.Importe)</span>
+                </div>
+                @if (l.EsCombo)
+                {
+                    <div class="small text-muted ps-3 mb-1">Incluye: @string.Join(", ", l.Incluye)</div>
+                }
+            }
+            <div class="d-flex justify-content-between mt-2"><span>Subtotal</span><span>@Html.Dinero(Model.Subtotal - Model.Descuento)</span></div>
+            @if (Model.Descuento > 0)
+            {
+                <div class="small text-success text-end">Ahorro por Promocion: @Html.Dinero(Model.Descuento)</div>
+            }
+            <div class="d-flex justify-content-between"><span>@empresa?.ImpuestoNombre (@empresa?.ImpuestoPorcentaje.ToString("0.##")%)</span><span>@Html.Dinero(Model.Impuesto)</span></div>
+            <hr />
+            <div class="d-flex justify-content-between fs-4 fw-bold"><span>Total</span><span>@Html.Dinero(Model.Total)</span></div>
+            <div class="small text-muted mt-2">Las promociones vigentes se aplican automáticamente.</div>
+        </div>
+
+        @if (Model.MesaId.HasValue && abierta)
+        {
+            <div class="card section-card mt-3">
+                <h6 class="mb-2"><i class="bi bi-people me-1"></i>Cuentas de la mesa @Model.Mesa?.Numero</h6>
+                @if (otras.Any())
+                {
+                    <div class="list-group list-group-flush mb-2">
+                        @foreach (var c in otras)
+                        {
+                            <a class="list-group-item list-group-item-action d-flex justify-content-between px-0" asp-action="Detalle" asp-route-id="@c.Id">
+                                <span>#@c.Id · @(string.IsNullOrWhiteSpace(c.Cliente) ? "Sin nombre" : c.Cliente)</span>
+                                <span class="fw-semibold">@Html.Dinero(c.Total)</span>
+                            </a>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="small text-muted mb-2">Esta es la única cuenta abierta de la mesa.</div>
+                }
+                @if (puedeEditar)
+                {
+                    <a class="btn btn-sm btn-outline-success w-100" asp-action="Index" asp-route-mesaId="@Model.MesaId"><i class="bi bi-plus-lg me-1"></i>Nueva cuenta en esta mesa</a>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (puedeAnular)
+{
+    <div class="modal fade" id="anularModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 rounded-4">
+                <form asp-action="Anular" method="post">
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="modal-header"><h5 class="modal-title">Anular orden #@Model.Id</h5><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <label class="form-label">Motivo de la anulación</label>
+                        <input class="form-control" name="motivo" maxlength="300" required />
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                        <button class="btn btn-danger">Anular orden</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@if (puedeEditar && otras.Any())
+{
+    <div class="modal fade" id="moverModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 rounded-4">
+                <form asp-action="MoverItem" method="post">
+                    <input type="hidden" name="ordenId" value="@Model.Id" />
+                    <input type="hidden" name="detalleId" id="moverDetalle" />
+                    <div class="modal-header"><h5 class="modal-title">Mover a otra cuenta</h5><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <p class="mb-3">Platillo: <strong id="moverNombre"></strong></p>
+                        <label class="form-label">Cuenta de destino</label>
+                        <select class="form-select mb-3" name="destinoId" required>
+                            @foreach (var c in otras)
+                            {
+                                <option value="@c.Id">#@c.Id · @(string.IsNullOrWhiteSpace(c.Cliente) ? "Sin nombre" : c.Cliente)</option>
+                            }
+                        </select>
+                        <label class="form-label">Cantidad a mover</label>
+                        <input class="form-control" type="number" name="cantidad" id="moverCantidad" min="1" value="1" required />
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                        <button class="btn btn-primary"><i class="bi bi-arrow-left-right me-1"></i>Mover</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+}
+
+@section Scripts {
+    <script>
+        // Al elegir una categoría, la lista de platillos muestra solo los de esa categoría
+        var filtroCategoria = document.getElementById('filtroCategoria');
+        var selPlatillo = document.getElementById('selPlatillo');
+        if (filtroCategoria && selPlatillo) {
+            var gruposPlatillos = Array.prototype.slice.call(selPlatillo.querySelectorAll('optgroup'));
+            var opcionVacia = selPlatillo.querySelector('option[value=""]');
+            filtroCategoria.addEventListener('change', function () {
+                selPlatillo.innerHTML = '';
+                if (opcionVacia) { selPlatillo.appendChild(opcionVacia.cloneNode(true)); }
+                gruposPlatillos.forEach(function (g) {
+                    if (filtroCategoria.value === '' || g.label === filtroCategoria.value) {
+                        selPlatillo.appendChild(g.cloneNode(true));
+                    }
+                });
+                selPlatillo.value = '';
+            });
+        }
+
+        var moverModal = document.getElementById('moverModal');
+        if (moverModal) {
+            moverModal.addEventListener('show.bs.modal', function (ev) {
+                var b = ev.relatedTarget;
+                var max = parseInt(b.getAttribute('data-cantidad'), 10);
+                document.getElementById('moverDetalle').value = b.getAttribute('data-detalle');
+                document.getElementById('moverNombre').textContent = b.getAttribute('data-nombre') + ' (' + max + ' en esta cuenta)';
+                var c = document.getElementById('moverCantidad');
+                c.max = max;
+                c.value = max;
+            });
+        }
+    </script>
+}

@@ -1,0 +1,70 @@
+@model List<Orden>
+@{
+    ViewData["Title"] = "Caja";
+    var metodos = (List<MetodoPago>)ViewBag.Metodos;
+    var cobradas = (List<Orden>)ViewBag.Cobradas;
+}
+<div class="mb-4">
+    <h1 class="page-title"><i class="bi bi-cash-stack me-2"></i>Caja</h1>
+    <p class="page-subtitle">Cierre de cuentas: el total incluye las promociones vigentes y los impuestos configurados.</p>
+</div>
+<div class="card table-card mb-4">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead><tr><th>Orden</th><th>Tipo</th><th>Mesa / Cliente</th><th>Estado</th><th>Subtotal</th><th>Descuento</th><th>Total</th><th style="min-width:320px">Cobrar</th></tr></thead>
+            <tbody>
+            @foreach (var o in Model)
+            {
+                <tr>
+                    <td class="fw-bold"><a asp-controller="Ordenes" asp-action="Detalle" asp-route-id="@o.Id">#@o.Id</a></td>
+                    <td>@o.TipoOrden?.Nombre</td>
+                    <td>@(o.Mesa != null ? "Mesa " + o.Mesa.Numero + (string.IsNullOrWhiteSpace(o.Cliente) ? "" : " · " + o.Cliente) : (o.Cliente ?? "—"))</td>
+                    <td><span class="badge" style="background:@o.EstadoOrden?.Color">@o.EstadoOrden?.Nombre</span></td>
+                    <td>@Html.Dinero(o.Subtotal)</td>
+                    <td>@(o.Descuento > 0 ? "- " + Html.Dinero(o.Descuento) : "—")</td>
+                    <td class="fw-bold">@Html.Dinero(o.Total)</td>
+                    <td>
+                        <form asp-action="Cobrar" method="post" class="d-flex gap-2" onsubmit="return confirm('¿Cobrar la orden #@o.Id?');">
+                            <input type="hidden" name="ordenId" value="@o.Id" />
+                            <select name="metodoPagoId" class="form-select form-select-sm">
+                                @foreach (var m in metodos) { <option value="@m.Id">@m.Nombre</option> }
+                            </select>
+                            <button class="btn btn-sm btn-primary" @(o.Detalles.Count == 0 ? "disabled" : null)><i class="bi bi-check-circle me-1"></i>Cobrar</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            @if (!Model.Any())
+            {
+                <tr><td colspan="8"><div class="empty-state"><i class="bi bi-check-circle"></i>No hay cuentas pendientes de cobro.</div></td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<h5 class="mb-3">Cobradas hoy</h5>
+<div class="card table-card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover">
+            <thead><tr><th>Orden</th><th>Hora</th><th>Mesa / Cliente</th><th>Método</th><th>Total</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var o in cobradas)
+            {
+                <tr>
+                    <td>#@o.Id</td>
+                    <td>@o.FechaCierre?.ToString("HH:mm")</td>
+                    <td>@(o.Mesa != null ? "Mesa " + o.Mesa.Numero + (string.IsNullOrWhiteSpace(o.Cliente) ? "" : " · " + o.Cliente) : (o.Cliente ?? "—"))</td>
+                    <td>@o.Pago?.MetodoPago?.Nombre</td>
+                    <td>@Html.Dinero(o.Total)</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-action="Comprobante" asp-route-id="@o.Id"><i class="bi bi-printer me-1"></i>Comprobante</a></td>
+                </tr>
+            }
+            @if (!cobradas.Any())
+            {
+                <tr><td colspan="6" class="text-center text-muted py-3">Aún no hay cobros hoy.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

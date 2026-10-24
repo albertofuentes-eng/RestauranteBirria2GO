@@ -1,0 +1,86 @@
+@model Empresa
+@inject PermisoService Permisos
+@{
+    ViewData["Title"] = "Configuración";
+    var parametros = (List<Parametro>)ViewBag.Parametros;
+    var monedas = (List<Moneda>)ViewBag.Monedas;
+    var puedeEditar = await Permisos.PuedeAsync(Modulos.Configuracion, Acciones.Editar);
+}
+<div class="mb-4">
+    <h1 class="page-title"><i class="bi bi-building-gear me-2"></i>Configuración de la empresa</h1>
+    <p class="page-subtitle">Datos del negocio, moneda, impuestos y parámetros. Nada de esto está escrito en el código.</p>
+</div>
+
+<div class="card section-card mb-4">
+    <form asp-action="GuardarEmpresa" method="post" enctype="multipart/form-data">
+        <fieldset @(puedeEditar ? null : "disabled")>
+            <div class="row g-3">
+                <div class="col-md-6"><label class="form-label">Nombre del negocio</label><input class="form-control" name="nombre" value="@Model.Nombre" required /></div>
+                <div class="col-md-3"><label class="form-label">NIT / identificación</label><input class="form-control" name="nit" value="@Model.Nit" /></div>
+                <div class="col-md-3"><label class="form-label">Teléfono</label><input class="form-control" name="telefono" value="@Model.Telefono" /></div>
+                <div class="col-md-8"><label class="form-label">Dirección</label><input class="form-control" name="direccion" value="@Model.Direccion" /></div>
+                <div class="col-md-4"><label class="form-label">Correo</label><input class="form-control" name="email" value="@Model.Email" /></div>
+                <div class="col-md-4">
+                    <label class="form-label">Moneda</label>
+                    <select class="form-select" name="monedaId">
+                        @foreach (var m in monedas) { <option value="@m.Id" selected="@(m.Id == Model.MonedaId ? "selected" : null)">@m.Codigo · @m.Nombre (@m.Simbolo)</option> }
+                    </select>
+                </div>
+                <div class="col-md-4"><label class="form-label">Nombre del impuesto</label><input class="form-control" name="impuestoNombre" value="@Model.ImpuestoNombre" required /></div>
+                <div class="col-md-4"><label class="form-label">Impuesto %</label><input class="form-control" type="number" min="0" max="100" step="0.01" name="impuestoPorcentaje" value="@Model.ImpuestoPorcentaje.ToString("0.##")" required /></div>
+                <div class="col-12"><label class="form-label">Mensaje al pie del comprobante</label><input class="form-control" name="mensajeComprobante" value="@Model.MensajeComprobante" maxlength="300" /></div>
+                <div class="col-md-6">
+                    <label class="form-label">Logotipo (PNG, JPG, SVG o WEBP, máx. 1 MB)</label>
+                    <input class="form-control" type="file" name="logoArchivo" accept=".png,.jpg,.jpeg,.svg,.webp" />
+                    <input class="form-control mt-2" name="logoUrl" value="@Model.LogoUrl" placeholder="o la URL de una imagen" />
+                    <div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="quitarLogo" value="true" id="quitarLogo" /><label class="form-check-label" for="quitarLogo">Quitar el logotipo actual</label></div>
+                </div>
+                <div class="col-md-6">
+                    @if (!string.IsNullOrWhiteSpace(Model.LogoUrl))
+                    {
+                        <div class="text-muted small mb-1">Logotipo actual</div>
+                        <img src="@Model.LogoUrl" alt="Logotipo" style="max-height:90px;max-width:100%" />
+                    }
+                </div>
+            </div>
+            @if (puedeEditar)
+            {
+                <button class="btn btn-primary mt-4"><i class="bi bi-save me-1"></i>Guardar cambios</button>
+            }
+        </fieldset>
+    </form>
+</div>
+
+<h4 class="mb-3">Parámetros del sistema</h4>
+<p class="text-muted">Reglas de negocio y valores operativos. Los códigos de estado deben coincidir con los de Catálogos.</p>
+<div class="card table-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead><tr><th>Grupo</th><th>Parámetro</th><th>Descripción</th><th style="min-width:230px">Valor</th></tr></thead>
+            <tbody>
+            @foreach (var p in parametros)
+            {
+                <tr>
+                    <td><span class="badge text-bg-light">@p.Grupo</span></td>
+                    <td><code>@p.Clave</code><div class="small text-muted">@p.TipoDato</div></td>
+                    <td class="small">@p.Descripcion</td>
+                    <td>
+                        @if (puedeEditar)
+                        {
+                            <form asp-action="GuardarParametro" method="post" class="d-flex gap-2">
+                                <input type="hidden" name="id" value="@p.Id" />
+                                <input class="form-control form-control-sm" name="valor" value="@p.Valor" required />
+                                <button class="btn btn-sm btn-outline-primary" title="Guardar"><i class="bi bi-check-lg"></i></button>
+                            </form>
+                        }
+                        else
+                        {
+                            @p.Valor
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

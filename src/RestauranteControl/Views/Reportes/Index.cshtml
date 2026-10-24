@@ -1,0 +1,100 @@
+@model ReporteVm
+@{
+    ViewData["Title"] = "Reportes";
+    var totalVentas = Model.Ventas.Sum(v => v.Total);
+    var totalOrdenes = Model.Ventas.Sum(v => v.Ordenes);
+    var totalPlatillos = Model.Tiempos.Sum(t => t.Platillos);
+    var promedioGlobal = totalPlatillos == 0 ? 0m : Model.Tiempos.Sum(t => t.MinutosPromedio * t.Platillos) / totalPlatillos;
+    var maxVenta = Model.Ventas.Any() ? Model.Ventas.Max(v => v.Total) : 0m;
+    var maxCantidad = Model.MasVendidos.Any() ? Model.MasVendidos.Max(v => v.Cantidad) : 0;
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi bi-bar-chart me-2"></i>Reportes</h1>
+        <p class="page-subtitle">Ventas, platillos más vendidos y tiempos de preparación por período.</p>
+    </div>
+    <div class="d-flex gap-2 no-print">
+        @if ((bool)ViewBag.VerBitacora)
+        {
+            <a class="btn btn-outline-secondary" asp-controller="Auditoria" asp-action="Index"><i class="bi bi-clock-history me-1"></i>Bitácora</a>
+        }
+        <button class="btn btn-outline-primary" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimir</button>
+    </div>
+</div>
+
+<div class="card section-card mb-4 no-print">
+    <form class="row g-3" method="get">
+        <div class="col-md-4"><label class="form-label">Desde</label><input type="date" class="form-control" name="desde" value="@Model.Desde.ToString("yyyy-MM-dd")" /></div>
+        <div class="col-md-4"><label class="form-label">Hasta</label><input type="date" class="form-control" name="hasta" value="@Model.Hasta.ToString("yyyy-MM-dd")" /></div>
+        <div class="col-md-4 d-flex align-items-end"><button class="btn btn-primary w-100"><i class="bi bi-search me-1"></i>Consultar</button></div>
+    </form>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="card section-card stat-card"><div class="text-muted">Ventas del período</div><div class="display-6 fw-bold">@Html.Dinero(totalVentas)</div></div></div>
+    <div class="col-md-4"><div class="card section-card stat-card"><div class="text-muted">Órdenes cobradas</div><div class="display-6 fw-bold">@totalOrdenes</div></div></div>
+    <div class="col-md-4"><div class="card section-card stat-card"><div class="text-muted">Tiempo promedio de preparación</div><div class="display-6 fw-bold">@promedioGlobal.ToString("0.0") min</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card table-card h-100">
+            <div class="p-3"><h5 class="mb-0">Ventas por día</h5></div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>Fecha</th><th>Órdenes</th><th>Subtotal</th><th>Desc.</th><th>Impuesto</th><th>Total</th></tr></thead>
+                    <tbody>
+                    @foreach (var v in Model.Ventas)
+                    {
+                        <tr>
+                            <td>@v.Fecha.Fecha()</td><td>@v.Ordenes</td><td>@Html.Dinero(v.Subtotal)</td><td>@Html.Dinero(v.Descuento)</td><td>@Html.Dinero(v.Impuesto)</td>
+                            <td class="fw-semibold">@Html.Dinero(v.Total)
+                                <div class="bar"><span style="width:@(maxVenta == 0 ? 0 : (int)(v.Total / maxVenta * 100))%"></span></div>
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.Ventas.Any()) { <tr><td colspan="6" class="text-center text-muted py-4">Sin ventas en el período.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card table-card h-100">
+            <div class="p-3"><h5 class="mb-0">Platillos más vendidos</h5></div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>Platillo</th><th>Categoría</th><th>Cantidad</th><th>Importe</th></tr></thead>
+                    <tbody>
+                    @foreach (var p in Model.MasVendidos)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@p.Producto</td><td>@p.Categoria</td>
+                            <td>@p.Cantidad<div class="bar"><span style="width:@(maxCantidad == 0 ? 0 : p.Cantidad * 100 / maxCantidad)%"></span></div></td>
+                            <td>@Html.Dinero(p.Importe)</td>
+                        </tr>
+                    }
+                    @if (!Model.MasVendidos.Any()) { <tr><td colspan="4" class="text-center text-muted py-4">Sin datos en el período.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-12">
+        <div class="card table-card">
+            <div class="p-3"><h5 class="mb-0">Tiempo de preparación por platillo</h5><div class="small text-muted">Desde que se registra el platillo hasta que cocina lo marca como listo.</div></div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>Platillo</th><th>Platillos preparados</th><th>Promedio (min)</th><th>Máximo (min)</th></tr></thead>
+                    <tbody>
+                    @foreach (var t in Model.Tiempos)
+                    {
+                        <tr><td class="fw-semibold">@t.Producto</td><td>@t.Platillos</td><td>@t.MinutosPromedio.ToString("0.0")</td><td>@t.MinutosMaximo.ToString("0.0")</td></tr>
+                    }
+                    @if (!Model.Tiempos.Any()) { <tr><td colspan="4" class="text-center text-muted py-4">Aún no hay platillos marcados como listos en el período.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

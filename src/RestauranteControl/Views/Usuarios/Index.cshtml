@@ -1,0 +1,94 @@
+@model List<Usuario>
+@inject PermisoService Permisos
+@{
+    ViewData["Title"] = "Usuarios";
+    var roles = (List<Rol>)ViewBag.Roles;
+    var puedeCrear = await Permisos.PuedeAsync(Modulos.Usuarios, Acciones.Crear);
+    var puedeEditar = await Permisos.PuedeAsync(Modulos.Usuarios, Acciones.Editar);
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi bi-people me-2"></i>Usuarios</h1>
+        <p class="page-subtitle">Cuentas de acceso del personal. Las contraseñas se guardan cifradas (hash BCrypt).</p>
+    </div>
+    @if (puedeCrear)
+    {
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#usuarioModal" data-usuario="@System.Text.Json.JsonSerializer.Serialize(new { id = 0, nombre = "", email = "", rolId = roles.FirstOrDefault()?.Id ?? 0, activo = true })"><i class="bi bi-person-plus me-1"></i>Nuevo usuario</button>
+    }
+</div>
+<div class="card table-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Último acceso</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var u in Model)
+            {
+                <tr>
+                    <td class="fw-semibold"><i class="bi bi-person-circle me-2"></i>@u.Nombre</td>
+                    <td>@u.Email</td>
+                    <td><span class="badge text-bg-light">@u.Rol?.Nombre</span></td>
+                    <td class="small">@(u.UltimoAcceso.HasValue ? u.UltimoAcceso.Value.FechaHora() : "—")</td>
+                    <td>
+                        <span class="badge @(u.Activo ? "text-bg-success" : "text-bg-secondary")">@(u.Activo ? "Activo" : "Inactivo")</span>
+                        @if (u.BloqueadoHasta.HasValue && u.BloqueadoHasta.Value > DateTime.Now) { <span class="badge text-bg-warning">Bloqueado</span> }
+                    </td>
+                    <td class="text-end">
+                        @if (puedeEditar)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#usuarioModal" data-usuario="@System.Text.Json.JsonSerializer.Serialize(new { id = u.Id, nombre = u.Nombre, email = u.Email, rolId = u.RolId, activo = u.Activo })"><i class="bi bi-pencil"></i></button>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="usuarioModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 rounded-4">
+            <form asp-action="Guardar" method="post" autocomplete="off">
+                <input type="hidden" name="id" id="uId" />
+                <div class="modal-header"><h5 class="modal-title">Usuario</h5><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <label class="form-label">Nombre</label><input class="form-control mb-3" name="nombre" id="uNombre" required />
+                    <label class="form-label">Correo</label><input class="form-control mb-3" type="email" name="email" id="uEmail" required />
+                    <label class="form-label">Rol</label>
+                    <select class="form-select mb-3" name="rolId" id="uRol">
+                        @foreach (var r in roles) { <option value="@r.Id">@r.Nombre</option> }
+                    </select>
+                    <label class="form-label">Contraseña <span class="text-muted small" id="uPassAyuda"></span></label>
+                    <input class="form-control mb-3" type="password" name="password" id="uPassword" autocomplete="new-password" />
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="forzarCambio" value="true" id="uForzar" />
+                        <label class="form-check-label" for="uForzar">Pedir cambio de contraseña en el próximo ingreso</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="activo" value="true" id="uActivo" />
+                        <input type="hidden" name="activo" value="false" />
+                        <label class="form-check-label" for="uActivo">Usuario activo</label>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('usuarioModal').addEventListener('show.bs.modal', function (ev) {
+            var d = JSON.parse(ev.relatedTarget.getAttribute('data-usuario'));
+            document.getElementById('uId').value = d.id;
+            document.getElementById('uNombre').value = d.nombre;
+            document.getElementById('uEmail').value = d.email;
+            document.getElementById('uRol').value = d.rolId;
+            document.getElementById('uActivo').checked = d.activo;
+            document.getElementById('uPassword').value = '';
+            document.getElementById('uPassword').required = d.id === 0;
+            document.getElementById('uPassAyuda').textContent = d.id === 0 ? '(obligatoria)' : '(déjela vacía para no cambiarla)';
+            document.getElementById('uForzar').checked = d.id === 0;
+        });
+    </script>
+}

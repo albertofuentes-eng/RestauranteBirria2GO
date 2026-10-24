@@ -1,0 +1,11 @@
+@model List<OrdenDetalle>
+@{
+    ViewData["Title"] = "Cocina";
+}
+<div class="mb-4">
+    <h1 class="page-title"><i class="bi bi-fire me-2"></i>Cocina</h1>
+    <p class="page-subtitle">Tablero de comandas por estado. Se actualiza solo; los platillos nuevos aparecen sin recargar.</p>
+</div>
+<div id="tablero" data-refresh-url="@Url.Action("Tablero")" data-refresh-seconds="@ViewData["Refresco"]">
+    @await Html.PartialAsync("_Tablero", Model)
+</div>

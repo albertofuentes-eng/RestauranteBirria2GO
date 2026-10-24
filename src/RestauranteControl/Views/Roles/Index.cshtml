@@ -1,0 +1,87 @@
+@model List<Rol>
+@inject PermisoService Permisos
+@{
+    ViewData["Title"] = "Roles y permisos";
+    var conteo = (Dictionary<int, int>)ViewBag.Usuarios;
+    var puedeCrear = await Permisos.PuedeAsync(Modulos.Roles, Acciones.Crear);
+    var puedeEditar = await Permisos.PuedeAsync(Modulos.Roles, Acciones.Editar);
+    var puedeEliminar = await Permisos.PuedeAsync(Modulos.Roles, Acciones.Eliminar);
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi bi-shield-lock me-2"></i>Roles y permisos</h1>
+        <p class="page-subtitle">Defina los perfiles y qué puede ver, crear, editar o eliminar cada uno en cada módulo.</p>
+    </div>
+    @if (puedeCrear)
+    {
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#rolModal" data-rol="@System.Text.Json.JsonSerializer.Serialize(new { id = 0, nombre = "", descripcion = "", activo = true })"><i class="bi bi-plus-lg me-1"></i>Nuevo rol</button>
+    }
+</div>
+<div class="card table-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead><tr><th>Rol</th><th>Descripción</th><th>Usuarios</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var r in Model)
+            {
+                <tr>
+                    <td class="fw-semibold">@r.Nombre @if (r.EsAdministrador) { <span class="badge text-bg-dark">Acceso total</span> }</td>
+                    <td>@r.Descripcion</td>
+                    <td>@(conteo.ContainsKey(r.Id) ? conteo[r.Id] : 0)</td>
+                    <td><span class="badge @(r.Activo ? "text-bg-success" : "text-bg-secondary")">@(r.Activo ? "Activo" : "Inactivo")</span></td>
+                    <td class="text-end text-nowrap">
+                        @if (!r.EsAdministrador)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary" asp-action="Permisos" asp-route-id="@r.Id"><i class="bi bi-ui-checks-grid me-1"></i>Permisos</a>
+                        }
+                        @if (puedeEditar)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#rolModal" data-rol="@System.Text.Json.JsonSerializer.Serialize(new { id = r.Id, nombre = r.Nombre, descripcion = r.Descripcion ?? "", activo = r.Activo })"><i class="bi bi-pencil"></i></button>
+                        }
+                        @if (puedeEliminar && !r.EsAdministrador)
+                        {
+                            <form asp-action="Eliminar" method="post" class="d-inline" onsubmit="return confirm('¿Eliminar el rol @r.Nombre?');">
+                                <input type="hidden" name="id" value="@r.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="rolModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 rounded-4">
+            <form asp-action="Guardar" method="post">
+                <input type="hidden" name="id" id="rId" />
+                <div class="modal-header"><h5 class="modal-title">Rol</h5><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <label class="form-label">Nombre</label><input class="form-control mb-3" name="nombre" id="rNombre" required />
+                    <label class="form-label">Descripción</label><input class="form-control mb-3" name="descripcion" id="rDescripcion" maxlength="200" />
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="activo" value="true" id="rActivo" />
+                            <input type="hidden" name="activo" value="false" />
+                        <label class="form-check-label" for="rActivo">Rol activo</label>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('rolModal').addEventListener('show.bs.modal', function (ev) {
+            var d = JSON.parse(ev.relatedTarget.getAttribute('data-rol'));
+            document.getElementById('rId').value = d.id;
+            document.getElementById('rNombre').value = d.nombre;
+            document.getElementById('rDescripcion').value = d.descripcion;
+            document.getElementById('rActivo').checked = d.activo;
+        });
+    </script>
+}

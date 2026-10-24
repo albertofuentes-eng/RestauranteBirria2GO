@@ -1,0 +1,236 @@
+@model List<Promocion>
+@inject PermisoService Permisos
+@{
+    ViewData["Title"] = "Promociones y combos";
+    var productos = (List<Producto>)ViewBag.Productos;
+    var puedeCrear = await Permisos.PuedeAsync(Modulos.Promociones, Acciones.Crear);
+    var puedeEditar = await Permisos.PuedeAsync(Modulos.Promociones, Acciones.Editar);
+    var puedeEliminar = await Permisos.PuedeAsync(Modulos.Promociones, Acciones.Eliminar);
+    var ahora = DateTime.Now;
+    var combos = Model.Where(x => ComboService.EsCombo(x)).OrderBy(x => x.Nombre).ToList();
+    var promociones = Model.Where(x => !ComboService.EsCombo(x)).OrderByDescending(x => x.VigenciaHasta).ToList();
+
+    string Formato(DateTime f) => f.ToString("yyyy-MM-ddTHH:mm");
+    string ComoJson(object o) => System.Text.Json.JsonSerializer.Serialize(o, o.GetType());
+    string Datos(Promocion x)
+    {
+        var combo = ComboService.EsCombo(x);
+        return ComoJson(new
+        {
+            id = x.Id, tipo = combo ? "combo" : "promocion", nombre = x.Nombre, descripcion = x.Descripcion ?? "",
+            precio = x.PrecioCombo,
+            desde = combo ? Formato(ahora) : Formato(x.VigenciaDesde),
+            hasta = combo ? Formato(ahora.AddMonths(1)) : Formato(x.VigenciaHasta),
+            activa = x.Activa,
+            items = x.Detalles.Select(d => new { productoId = d.ProductoId, cantidad = d.Cantidad }).ToList()
+        });
+    }
+    var nuevoCombo = ComoJson(new
+    {
+        id = 0, tipo = "combo", nombre = "", descripcion = "", precio = 0,
+        desde = Formato(ahora), hasta = Formato(ahora.AddMonths(1)), activa = true, items = new object[0]
+    });
+    var nuevaPromo = ComoJson(new
+    {
+        id = 0, tipo = "promocion", nombre = "", descripcion = "", precio = 0,
+        desde = Formato(ahora), hasta = Formato(ahora.AddMonths(1)), activa = true, items = new object[0]
+    });
+}
+<div class="mb-4">
+    <h1 class="page-title"><i class="bi bi-tags me-2"></i>Promociones y combos</h1>
+    <p class="page-subtitle">Los combos tienen un precio fijo y se venden como un platillo del menú. Las promociones se aplican durante su vigencia.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-6">
+        <div class="card table-card h-100">
+            <div class="p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Combos <span class="badge text-bg-light">@combos.Count</span></h5>
+                @if (puedeCrear)
+                {
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#promoModal" data-promo="@nuevoCombo"><i class="bi bi-plus-lg me-1"></i>Nuevo combo</button>
+                }
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead><tr><th>Combo</th><th>Incluye</th><th>Precio</th><th>Estado</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var x in combos)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@x.Nombre<div class="small text-muted">@x.Descripcion</div></td>
+                            <td class="small">@string.Join(", ", x.Detalles.Select(d => d.Cantidad + " x " + d.Producto?.Nombre))</td>
+                            <td class="fw-bold">@Html.Dinero(x.PrecioCombo)</td>
+                            <td><span class="badge @(x.Activa ? "text-bg-success" : "text-bg-secondary")">@(x.Activa ? "Activo" : "Inactivo")</span></td>
+                            <td class="text-end text-nowrap">
+                                @if (puedeEditar)
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#promoModal" data-promo="@Datos(x)"><i class="bi bi-pencil"></i></button>
+                                }
+                                @if (puedeEliminar)
+                                {
+                                    <form asp-action="Eliminar" method="post" class="d-inline" onsubmit="return confirm('¿Dar de baja este combo?');">
+                                        <input type="hidden" name="id" value="@x.Id" />
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (!combos.Any())
+                    {
+                        <tr><td colspan="5"><div class="empty-state"><i class="bi bi-box-seam"></i>No hay combos registrados.</div></td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-6">
+        <div class="card table-card h-100">
+            <div class="p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-percent me-2"></i>Promociones <span class="badge text-bg-light">@promociones.Count</span></h5>
+                @if (puedeCrear)
+                {
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#promoModal" data-promo="@nuevaPromo"><i class="bi bi-plus-lg me-1"></i>Nueva promoción</button>
+                }
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead><tr><th>Promoción</th><th>Incluye</th><th>Precio</th><th>Vigencia</th><th>Estado</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var x in promociones)
+                    {
+                        var vigente = x.Activa && ahora >= x.VigenciaDesde && ahora <= x.VigenciaHasta;
+                        <tr>
+                            <td class="fw-semibold">@x.Nombre<div class="small text-muted">@x.Descripcion</div></td>
+                            <td class="small">@string.Join(", ", x.Detalles.Select(d => d.Cantidad + " x " + d.Producto?.Nombre))</td>
+                            <td class="fw-bold">@Html.Dinero(x.PrecioCombo)</td>
+                            <td class="small">@x.VigenciaDesde.FechaHora()<br />@x.VigenciaHasta.FechaHora()</td>
+                            <td><span class="badge @(vigente ? "text-bg-success" : "text-bg-secondary")">@(vigente ? "Vigente" : "No vigente")</span></td>
+                            <td class="text-end text-nowrap">
+                                @if (puedeEditar)
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#promoModal" data-promo="@Datos(x)"><i class="bi bi-pencil"></i></button>
+                                }
+                                @if (puedeEliminar)
+                                {
+                                    <form asp-action="Eliminar" method="post" class="d-inline" onsubmit="return confirm('¿Dar de baja esta promoción?');">
+                                        <input type="hidden" name="id" value="@x.Id" />
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (!promociones.Any())
+                    {
+                        <tr><td colspan="6"><div class="empty-state"><i class="bi bi-percent"></i>No hay promociones registradas.</div></td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="promoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 rounded-4">
+            <form asp-action="Guardar" method="post">
+                <input type="hidden" name="id" id="prId" />
+                <div class="modal-header"><h5 class="modal-title">Combo / promoción</h5><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body" style="max-height:65vh; overflow-y:auto;">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo</label>
+                            <select class="form-select" name="tipo" id="prTipo">
+                                <option value="combo">Combo</option>
+                                <option value="promocion">Promoción</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8"><label class="form-label">Nombre</label><input class="form-control" name="nombre" id="prNombre" required /></div>
+                        <div class="col-md-8"><label class="form-label">Descripción</label><input class="form-control" name="descripcion" id="prDescripcion" maxlength="300" /></div>
+                        <div class="col-md-4"><label class="form-label">Precio</label><input class="form-control" type="number" step="0.01" min="0" name="precioCombo" id="prPrecio" required /></div>
+                        <div class="col-12" id="prVigencia">
+                            <div class="row g-3">
+                                <div class="col-md-6"><label class="form-label">Vigente desde</label><input class="form-control" type="datetime-local" name="vigenciaDesde" id="prDesde" /></div>
+                                <div class="col-md-6"><label class="form-label">Vigente hasta</label><input class="form-control" type="datetime-local" name="vigenciaHasta" id="prHasta" /></div>
+                            </div>
+                        </div>
+                        <div class="col-12 form-check form-switch ps-5">
+                            <input class="form-check-input" type="checkbox" name="activa" value="true" id="prActiva" />
+                            <input type="hidden" name="activa" value="false" />
+                            <label class="form-check-label" for="prActiva">Activo</label>
+                        </div>
+                    </div>
+                    <h6 class="mt-4">Platillos incluidos</h6>
+                    <div id="prItems"></div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="prAgregar"><i class="bi bi-plus-lg me-1"></i>Agregar platillo</button>
+                    <p class="small text-muted mt-3 mb-0" id="prNota"></p>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<template id="prFila">
+    <div class="d-flex gap-2 mb-2 pr-fila">
+        <select class="form-select" name="productoId">
+            @foreach (var p in productos)
+            {
+                <option value="@p.Id">@p.Nombre · @Html.Dinero(p.Precio)</option>
+            }
+        </select>
+        <input class="form-control" style="width:90px" type="number" min="1" name="cantidad" value="1" />
+        <button type="button" class="btn btn-outline-danger pr-quitar"><i class="bi bi-x-lg"></i></button>
+    </div>
+</template>
+
+@section Scripts {
+    <script>
+        (function () {
+            var cont = document.getElementById('prItems');
+            var tipo = document.getElementById('prTipo');
+            var vigencia = document.getElementById('prVigencia');
+            var desde = document.getElementById('prDesde');
+            var hasta = document.getElementById('prHasta');
+
+            function aplicarTipo() {
+                var combo = tipo.value === 'combo';
+                vigencia.style.display = combo ? 'none' : '';
+                desde.required = !combo;
+                hasta.required = !combo;
+                document.getElementById('prNota').textContent = combo
+                    ? 'El combo se publica en el menú con este precio y no tiene fecha límite: solo se activa o se desactiva.'
+                    : 'Cuando una cuenta contenga todos los platillos, se cobra este precio en lugar de la suma individual, durante la vigencia indicada.';
+            }
+            function agregar(productoId, cantidad) {
+                var nodo = document.getElementById('prFila').content.firstElementChild.cloneNode(true);
+                if (productoId) nodo.querySelector('select').value = productoId;
+                nodo.querySelector('input[name=cantidad]').value = cantidad || 1;
+                nodo.querySelector('.pr-quitar').addEventListener('click', function () { nodo.remove(); });
+                cont.appendChild(nodo);
+            }
+            tipo.addEventListener('change', aplicarTipo);
+            document.getElementById('prAgregar').addEventListener('click', function () { agregar(null, 1); });
+            document.getElementById('promoModal').addEventListener('show.bs.modal', function (ev) {
+                var d = JSON.parse(ev.relatedTarget.getAttribute('data-promo'));
+                document.getElementById('prId').value = d.id;
+                tipo.value = d.tipo;
+                document.getElementById('prNombre').value = d.nombre;
+                document.getElementById('prDescripcion').value = d.descripcion;
+                document.getElementById('prPrecio').value = d.precio;
+                desde.value = d.desde;
+                hasta.value = d.hasta;
+                document.getElementById('prActiva').checked = d.activa;
+                cont.innerHTML = '';
+                if (d.items.length === 0) { agregar(null, 1); agregar(null, 1); }
+                d.items.forEach(function (i) { agregar(i.productoId, i.cantidad); });
+                aplicarTipo();
+            });
+        })();
+    </script>
+}

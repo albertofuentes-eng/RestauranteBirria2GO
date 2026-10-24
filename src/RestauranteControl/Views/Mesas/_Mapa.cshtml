@@ -1,0 +1,90 @@
+@model List<MesaMapaDto>
+@inject PermisoService Permisos
+@{
+    var estados = (List<EstadoMesa>)ViewBag.Estados;
+    var puedeEditar = await Permisos.PuedeAsync(Modulos.Mesas, Acciones.Editar);
+    var puedeOrdenes = await Permisos.PuedeAsync(Modulos.Ordenes, Acciones.Ver);
+    var zonas = Model.GroupBy(m => m.Zona).ToList();
+}
+<div class="d-flex flex-wrap gap-2 mb-4">
+    @foreach (var e in estados)
+    {
+        <span class="badge fs-6" style="background:@e.Color">@e.Nombre: @Model.Count(m => m.EstadoMesaId == e.Id)</span>
+    }
+</div>
+@if (!Model.Any())
+{
+    <div class="empty-state"><i class="bi bi-grid-3x3-gap"></i>No hay mesas activas. Créelas en "Administrar mesas".</div>
+}
+@foreach (var zona in zonas)
+{
+    <h5 class="mb-3 mt-2"><i class="bi bi-geo-alt me-1"></i>@zona.Key</h5>
+    <div class="row g-3 mb-3">
+        @foreach (var m in zona)
+        {
+            <div class="col-sm-6 col-lg-4 col-xl-3">
+                <div class="card mesa-card h-100" style="border-left-color:@m.Color">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h4 class="fw-bold mb-1"><i class="bi bi-table me-2"></i>@m.Numero</h4>
+                                <div class="text-muted small"><i class="bi bi-people"></i> @m.Capacidad personas</div>
+                            </div>
+                            <span class="badge" style="background:@m.Color">@m.Estado</span>
+                        </div>
+                        @if (m.OrdenesAbiertas > 1)
+                        {
+                            <div class="small mt-2"><i class="bi bi-people me-1"></i><strong>@m.OrdenesAbiertas cuentas abiertas</strong> · @Html.Dinero(m.TotalAbierto) · @m.MinutosOcupada min</div>
+                        }
+                        else if (m.OrdenId.HasValue)
+                        {
+                            <div class="small mt-2">Orden #@m.OrdenId · <strong>@Html.Dinero(m.OrdenTotal ?? 0)</strong> · @m.MinutosOcupada min</div>
+                        }
+                        @if (m.ProximaReserva.HasValue)
+                        {
+                            <div class="small text-primary mt-1"><i class="bi bi-calendar-event me-1"></i>Reserva @m.ProximaReserva.Value.FechaHora() · @m.ClienteReserva</div>
+                        }
+                        <hr />
+                        <div class="d-flex gap-2 flex-wrap">
+                            @if (puedeOrdenes)
+                            {
+                                if (m.OrdenesAbiertas > 1)
+                                {
+                                    <a class="btn btn-sm btn-primary" asp-controller="Ordenes" asp-action="Index" asp-route-soloMesa="@m.MesaId"><i class="bi bi-receipt me-1"></i>Ver cuentas (@m.OrdenesAbiertas)</a>
+                                    <a class="btn btn-sm btn-outline-success" asp-controller="Ordenes" asp-action="Index" asp-route-mesaId="@m.MesaId" title="Abrir otra cuenta en esta mesa"><i class="bi bi-plus-lg me-1"></i>Cuenta</a>
+                                }
+                                else if (m.OrdenId.HasValue)
+                                {
+                                    <a class="btn btn-sm btn-primary" asp-controller="Ordenes" asp-action="Detalle" asp-route-id="@m.OrdenId"><i class="bi bi-receipt me-1"></i>Ver orden</a>
+                                    <a class="btn btn-sm btn-outline-success" asp-controller="Ordenes" asp-action="Index" asp-route-mesaId="@m.MesaId" title="Abrir otra cuenta en esta mesa"><i class="bi bi-plus-lg me-1"></i>Cuenta</a>
+                                }
+                                else
+                                {
+                                    <a class="btn btn-sm btn-success" asp-controller="Ordenes" asp-action="Index" asp-route-mesaId="@m.MesaId"><i class="bi bi-plus-lg me-1"></i>Abrir orden</a>
+                                }
+                            }
+                            @if (puedeEditar)
+                            {
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">Cambiar estado</button>
+                                    <ul class="dropdown-menu">
+                                        @foreach (var e in estados)
+                                        {
+                                            <li>
+                                                <form asp-action="CambiarEstado" method="post">
+                                                    <input type="hidden" name="id" value="@m.MesaId" />
+                                                    <input type="hidden" name="estadoId" value="@e.Id" />
+                                                    <button class="dropdown-item @(e.Id == m.EstadoMesaId ? "active" : "")"><span class="status-dot" style="background:@e.Color"></span>@e.Nombre</button>
+                                                </form>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}

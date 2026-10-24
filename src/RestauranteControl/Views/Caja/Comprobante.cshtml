@@ -1,0 +1,153 @@
+@model Orden
+@{
+    ViewData["Title"] = "Comprobante " + ViewBag.Numero;
+    var empresa = ViewData["Empresa"] as Empresa;
+
+    // 1. Armamos las líneas del comprobante usando el helper
+    var lineas = CuentaHelper.Armar(Model);
+
+    // 2. Calculamos el ahorro sumando los importes de las líneas y comparando con el subtotal
+    decimal sumaImportesLineas = lineas.Sum(l => l.Importe);
+    decimal ahorroCalculado = Model.Descuento;
+
+    if (sumaImportesLineas > Model.Subtotal && Model.Subtotal > 0)
+    {
+        ahorroCalculado += (sumaImportesLineas - Model.Subtotal);
+    }
+
+    decimal subtotalNormal = Model.Subtotal + (ahorroCalculado - Model.Descuento);
+}
+
+<div class="d-flex gap-2 mb-3 no-print">
+    <a class="btn btn-outline-secondary" asp-action="Index"><i class="bi bi-arrow-left me-1"></i>Caja</a>
+    <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimir</button>
+</div>
+
+<div class="card section-card comprobante mx-auto">
+    <div class="text-center mb-3">
+        @if (!string.IsNullOrWhiteSpace(empresa?.LogoUrl))
+        {
+            <img src="@(empresa?.LogoUrl)" alt="@empresa?.Nombre" class="login-logo mb-2" />
+        }
+        <h4 class="mb-0">@empresa?.Nombre</h4>
+        <div class="small">@empresa?.Direccion</div>
+        @if (!string.IsNullOrWhiteSpace(empresa?.Nit))
+        {
+            <div class="small">NIT: @(empresa?.Nit)</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(empresa?.Telefono))
+        {
+            <div class="small">Tel. @(empresa?.Telefono)</div>
+        }
+    </div>
+
+    <div class="d-flex justify-content-between small mb-1"><span>Comprobante</span><strong>@ViewBag.Numero</strong></div>
+    <div class="d-flex justify-content-between small mb-1"><span>Orden</span><span>#@Model.Id · @Model.TipoOrden?.Nombre</span></div>
+    @if (Model.Mesa != null)
+    {
+        <div class="d-flex justify-content-between small mb-1"><span>Mesa</span><span>@Model.Mesa.Numero</span></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.Cliente))
+    {
+        <div class="d-flex justify-content-between small mb-1"><span>Cliente</span><span>@Model.Cliente</span></div>
+    }
+    <div class="d-flex justify-content-between small mb-1"><span>Fecha</span><span>@Model.FechaCierre?.ToString("dd/MM/yyyy HH:mm")</span></div>
+    <div class="d-flex justify-content-between small mb-3"><span>Cajero</span><span>@Model.Pago?.Usuario?.Nombre</span></div>
+
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th>CANT.</th>
+                <th>DESCRIPCIÓN</th>
+                <th class="text-end">IMPORTE</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var l in lineas)
+            {
+                <tr>
+                    <td class="align-top">@l.Cantidad</td>
+                    <td>
+                        @if (l.EsCombo)
+                        {
+                            <div class="fw-bold">@l.Descripcion</div>
+
+                            @* Buscamos la promoción en la orden según el nombre de la línea *@
+                            var promoOrden = Model.Promociones?.FirstOrDefault(p => p.Promocion != null && p.Promocion.Nombre == l.Descripcion);
+                            var detallesPromo = promoOrden?.Promocion?.Detalles;
+
+                            if (detallesPromo != null && detallesPromo.Any())
+                            {
+                                <div class="ps-2 my-1 border-start border-2 border-secondary-subtle small text-muted">
+                                    @foreach (var d in detallesPromo)
+                                    {
+                                        var precioInd = d.Producto?.Precio ?? 0;
+                                        var importeInd = precioInd * d.Cantidad;
+
+                                        <div class="d-flex justify-content-between me-2">
+                                            <span>• @d.Cantidad x @(d.Producto?.Nombre ?? "Producto")</span>
+                                            <span class="fw-medium ms-3">@Html.Dinero(importeInd)</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else if (l.Incluye != null && l.Incluye.Any())
+                            {
+                                <div class="ps-2 my-1 border-start border-2 border-secondary-subtle small text-muted">
+                                    @foreach (var item in l.Incluye)
+                                    {
+                                        <div class="d-flex justify-content-between me-2">
+                                            <span>• @item</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            @l.Descripcion
+                        }
+                    </td>
+                    <td class="text-end align-top fw-semibold">
+                        @Html.Dinero(l.Importe)
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-between">
+        <span>Subtotal</span>
+        <span>@Html.Dinero(ahorroCalculado > 0 ? subtotalNormal : Model.Subtotal)</span>
+    </div>
+
+    @if (ahorroCalculado > 0)
+    {
+        <div class="d-flex justify-content-between text-success fw-semibold">
+            <span>Ahorro por promoción</span>
+            <span>@Html.Dinero(ahorroCalculado)</span>
+        </div>
+    }
+
+    <div class="d-flex justify-content-between">
+        <span>@empresa?.ImpuestoNombre (@empresa?.ImpuestoPorcentaje.ToString("0.##")%)</span>
+        <span>@Html.Dinero(Model.Impuesto)</span>
+    </div>
+
+    <hr />
+
+    <div class="d-flex justify-content-between fs-5 fw-bold">
+        <span>TOTAL</span>
+        <span>@Html.Dinero(Model.Total)</span>
+    </div>
+
+    <div class="d-flex justify-content-between small mt-1">
+        <span>Pagado con</span>
+        <span>@Model.Pago?.MetodoPago?.Nombre</span>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(empresa?.MensajeComprobante))
+    {
+        <div class="text-center mt-4 small">@(empresa?.MensajeComprobante)</div>
+    }
+</div>

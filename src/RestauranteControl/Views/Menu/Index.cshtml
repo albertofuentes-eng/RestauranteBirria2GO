@@ -1,0 +1,308 @@
+@model List<Producto>
+@inject PermisoService Permisos
+@{
+    ViewData["Title"] = "Menú";
+    var categorias = (List<CategoriaProducto>)ViewBag.Categorias;
+    var catCombos0 = (string)ViewBag.CategoriaCombos;
+    var activas = categorias.Where(c => c.Activa && c.Nombre != catCombos0).ToList();
+    var puedeCrear = await Permisos.PuedeAsync(Modulos.Menu, Acciones.Crear);
+    var puedeEditar = await Permisos.PuedeAsync(Modulos.Menu, Acciones.Editar);
+    var puedeEliminar = await Permisos.PuedeAsync(Modulos.Menu, Acciones.Eliminar);
+    var puedeVerPromos = (bool)ViewBag.PuedeVerPromos;
+    var catCombos = (string)ViewBag.CategoriaCombos;
+    var promociones = ViewBag.Promociones as List<Promocion> ?? new List<Promocion>();
+}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi bi-journal-text me-2"></i>Gestión de menú</h1>
+        <p class="page-subtitle">Categorías, platillos, precios y disponibilidad (agotado) sin tocar el código.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        @if (puedeVerPromos)
+        {
+            <a class="btn btn-outline-secondary" asp-controller="Promociones" asp-action="Index"><i class="bi bi-tags me-1"></i>Administrar combos</a>
+        }
+        @if (puedeCrear)
+        {
+            <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#categoriaModal" data-categoria="@System.Text.Json.JsonSerializer.Serialize(new { id = 0, nombre = "", activa = true })"><i class="bi bi-folder-plus me-1"></i>Nueva categoría</button>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#productoModal" data-producto="@System.Text.Json.JsonSerializer.Serialize(new { id = 0, nombre = "", descripcion = "", categoria = activas.FirstOrDefault()?.Id ?? 0, precio = 0, disponible = true, activo = true })"><i class="bi bi-plus-lg me-1"></i>Nuevo platillo</button>
+        }
+    </div>
+</div>
+
+<div class="card section-card mb-4">
+    <h6 class="mb-2">Categorías</h6>
+    <div class="d-flex flex-wrap gap-2">
+        @foreach (var c in categorias)
+        {
+            <span class="badge @(c.Activa ? "text-bg-primary" : "text-bg-secondary") fs-6 d-inline-flex align-items-center gap-2">
+                @c.Nombre
+                @if (puedeEditar && c.Nombre != catCombos)
+                {
+                    <a href="#" class="text-white" data-bs-toggle="modal" data-bs-target="#categoriaModal" data-categoria="@System.Text.Json.JsonSerializer.Serialize(new { id = c.Id, nombre = c.Nombre, activa = c.Activa })"><i class="bi bi-pencil"></i></a>
+                }
+                @if (puedeEliminar && c.Nombre != catCombos)
+                {
+                    <form asp-action="EliminarCategoria" method="post" class="d-inline" onsubmit="return confirm('¿Dar de baja la categoría @c.Nombre?');">
+                        <input type="hidden" name="id" value="@c.Id" />
+                        <button class="btn btn-link p-0 text-white"><i class="bi bi-x-lg"></i></button>
+                    </form>
+                }
+            </span>
+        }
+    </div>
+</div>
+
+<!-- BOTONES DE FILTRO -->
+<div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+    <button type="button" class="btn btn-sm btn-primary filter-btn active" data-filter="todos"><i class="bi bi-grid-fill me-1"></i>Todos</button>
+    <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="individuales"><i class="bi bi-egg-fried me-1"></i>Productos individuales</button>
+    <button type="button" class="btn btn-sm btn-outline-warning filter-btn" data-filter="combos"><i class="bi bi-box-seam me-1"></i>Combos</button>
+    <button type="button" class="btn btn-sm btn-outline-danger filter-btn" data-filter="ofertas"><i class="bi bi-percent me-1"></i>Ofertas</button>
+    <div class="ms-md-auto d-flex align-items-center gap-2">
+        <label for="filtroCategoria" class="small text-muted mb-0 text-nowrap"><i class="bi bi-funnel me-1"></i>Categoría</label>
+        <select id="filtroCategoria" class="form-select form-select-sm" style="min-width: 200px;">
+            <option value="">Todas las categorías</option>
+            @foreach (var cat in categorias.OrderBy(x => x.Nombre))
+            {
+                <option value="@cat.Nombre">@cat.Nombre</option>
+            }
+        </select>
+    </div>
+</div>
+
+<div class="card table-card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th style="width: 70px;">Imagen</th>
+                    <th>Platillo</th>
+                    <th>Categoría</th>
+                    <th>Precio</th>
+                    <th>Disponibilidad</th>
+                    <th>Estado</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @* PRODUCTOS E INDIVIDUALES Y COMBOS *@
+                @foreach (var p in Model)
+                {
+                    var esCombo = p.CategoriaProducto?.Nombre == catCombos;
+                    var tipoFiltro = esCombo ? "combos" : "individuales";
+
+                    <tr class="menu-item-row @(p.Activo ? "" : "text-muted")" data-tipo="@tipoFiltro" data-categoria="@p.CategoriaProducto?.Nombre">
+                        <td>
+                            @if (!string.IsNullOrEmpty(p.ImagenUrl))
+                            {
+                                <img src="@p.ImagenUrl" alt="@p.Nombre" class="rounded" style="width: 50px; height: 50px; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <div class="rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width: 50px; height: 50px;">
+                                    <i class="bi bi-image fs-4"></i>
+                                </div>
+                            }
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@p.Nombre @if (esCombo)
+                                {
+                                    <span class="badge text-bg-warning ms-1">Combo</span>
+                                }</div>
+                            <div class="small text-muted">@p.Descripcion</div>
+                        </td>
+                        <td>@p.CategoriaProducto?.Nombre</td>
+                        <td class="fw-bold">@Html.Dinero(p.Precio)</td>
+                        <td>
+                            @if (puedeEditar)
+                            {
+                                <form asp-action="Disponibilidad" method="post">
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <input type="hidden" name="disponible" value="@((!p.Disponible).ToString().ToLower())" />
+                                    <button class="btn btn-sm @(p.Disponible ? "btn-outline-success" : "btn-outline-danger")">@(p.Disponible ? "Disponible" : "Agotado")</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="badge @(p.Disponible ? "text-bg-success" : "text-bg-danger")">@(p.Disponible ? "Disponible" : "Agotado")</span>
+                            }
+                        </td>
+                        <td><span class="badge @(p.Activo ? "text-bg-primary" : "text-bg-secondary")">@(p.Activo ? "Activo" : "Inactivo")</span></td>
+                        <td class="text-end text-nowrap">
+                            @if (esCombo && puedeVerPromos)
+                            {
+                                <a class="btn btn-sm btn-outline-secondary" asp-controller="Promociones" asp-action="Index" title="El precio y los platillos del combo se editan en Promociones"><i class="bi bi-tags me-1"></i>Editar combo</a>
+                            }
+                            @if (puedeEditar && !esCombo)
+                            {
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#productoModal" data-producto="@System.Text.Json.JsonSerializer.Serialize(new { id = p.Id, nombre = p.Nombre, descripcion = p.Descripcion ?? "", categoria = p.CategoriaProductoId, precio = p.Precio, disponible = p.Disponible, activo = p.Activo })"><i class="bi bi-pencil"></i></button>
+                            }
+                            @if (puedeEliminar && !esCombo)
+                            {
+                                <form asp-action="EliminarProducto" method="post" class="d-inline" onsubmit="return confirm('¿Dar de baja este platillo?');">
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+
+                @* PROMOCIONES Y OFERTAS (FILTRANDO COMBOS) *@
+                @foreach (var promo in promociones.Where(p => !p.Nombre.Contains("Combo", StringComparison.OrdinalIgnoreCase)))
+                {
+                    <tr class="menu-item-row table-warning" data-tipo="ofertas" data-categoria="">
+                        <td>
+                            <div class="rounded bg-warning text-dark d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                                <i class="bi bi-percent fs-4"></i>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@promo.Nombre <span class="badge text-bg-danger ms-1">Oferta</span></div>
+                            <div class="small text-muted">@promo.Descripcion</div>
+                        </td>
+                        <td>Promoción</td>
+                        <td class="fw-bold text-success">@Html.Dinero(promo.PrecioCombo)</td>
+                        <td><span class="badge text-bg-success">Vigente</span></td>
+                        <td><span class="badge text-bg-primary">Activo</span></td>
+                        <td class="text-end text-nowrap">
+                            @if (puedeVerPromos)
+                            {
+                                <a class="btn btn-sm btn-outline-secondary" asp-controller="Promociones" asp-action="Index"><i class="bi bi-tags me-1"></i>Ver oferta</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- MODAL PRODUCTO (CON SUBIDA DE FOTO) -->
+<div class="modal fade" id="productoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 rounded-4">
+            <form asp-action="GuardarProducto" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="id" id="pId" />
+                <div class="modal-header">
+                    <h5 class="modal-title">Platillo</h5>
+                    <button class="btn-close" type="button" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Nombre</label>
+                        <input class="form-control" name="nombre" id="pNombre" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Categoría</label>
+                        <select class="form-select" name="categoriaProductoId" id="pCategoria">
+                            @foreach (var c in activas)
+                            {
+                                <option value="@c.Id">@c.Nombre</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Precio</label>
+                        <input class="form-control" type="number" step="0.01" min="0" name="precio" id="pPrecio" required />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Descripción</label>
+                        <input class="form-control" name="descripcion" id="pDescripcion" maxlength="500" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Fotografía del platillo</label>
+                        <input class="form-control" type="file" name="imagen" accept="image/*" />
+                    </div>
+                    <div class="col-md-6 form-check form-switch ps-5">
+                        <input class="form-check-input" type="checkbox" name="disponible" value="true" id="pDisponible" />
+                        <input type="hidden" name="disponible" value="false" />
+                        <label class="form-check-label" for="pDisponible">Disponible (desmarque si está agotado)</label>
+                    </div>
+                    <div class="col-md-6 form-check form-switch ps-5">
+                        <input class="form-check-input" type="checkbox" name="activo" value="true" id="pActivo" />
+                        <input type="hidden" name="activo" value="false" />
+                        <label class="form-check-label" for="pActivo">Activo en el menú</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="categoriaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 rounded-4">
+            <form asp-action="GuardarCategoria" method="post">
+                <input type="hidden" name="id" id="cId" />
+                <div class="modal-header"><h5 class="modal-title">Categoría</h5><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <label class="form-label">Nombre</label>
+                    <input class="form-control mb-3" name="nombre" id="cNombre" required />
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="activa" value="true" id="cActiva" />
+                        <input type="hidden" name="activa" value="false" />
+                        <label class="form-check-label" for="cActiva">Categoría activa</label>
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('productoModal').addEventListener('show.bs.modal', function (ev) {
+            var d = JSON.parse(ev.relatedTarget.getAttribute('data-producto'));
+            document.getElementById('pId').value = d.id;
+            document.getElementById('pNombre').value = d.nombre;
+            document.getElementById('pDescripcion').value = d.descripcion;
+            document.getElementById('pCategoria').value = d.categoria;
+            document.getElementById('pPrecio').value = d.precio;
+            document.getElementById('pDisponible').checked = d.disponible;
+            document.getElementById('pActivo').checked = d.activo;
+        });
+
+        document.getElementById('categoriaModal').addEventListener('show.bs.modal', function (ev) {
+            var d = JSON.parse(ev.relatedTarget.getAttribute('data-categoria'));
+            document.getElementById('cId').value = d.id;
+            document.getElementById('cNombre').value = d.nombre;
+            document.getElementById('cActiva').checked = d.activa;
+        });
+
+        // Filtros combinados: tipo (Todos / Individuales / Combos / Ofertas) + categoría
+        var filtroTipo = 'todos';
+        function aplicarFiltros() {
+            var categoria = document.getElementById('filtroCategoria').value;
+            document.querySelectorAll('.menu-item-row').forEach(function (row) {
+                var okTipo = filtroTipo === 'todos' || row.getAttribute('data-tipo') === filtroTipo;
+                var okCategoria = categoria === '' || row.getAttribute('data-categoria') === categoria;
+                row.style.display = (okTipo && okCategoria) ? '' : 'none';
+            });
+        }
+        document.getElementById('filtroCategoria').addEventListener('change', aplicarFiltros);
+
+        // Script para filtrar rápidamente entre Todos, Productos Individuales, Combos y Ofertas
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.filter-btn').forEach(b => {
+                    b.classList.remove('active', 'btn-primary', 'btn-warning', 'btn-danger');
+                    b.classList.add('btn-outline-primary');
+                });
+
+                this.classList.add('active');
+                var filter = this.getAttribute('data-filter');
+
+                filtroTipo = filter;
+                aplicarFiltros();
+            });
+        });
+    </script>
+}

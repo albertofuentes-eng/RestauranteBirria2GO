@@ -1,0 +1,23 @@
+﻿**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+
+# Configuraciones privadas
+appsettings.Development.json
+.env
+.env.*
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Archivos de base de datos
+*.bak
+*.mdf
+*.ldf
+
+# Imagenes cargadas por usuarios
+**/wwwroot/uploads/*
+!**/wwwroot/uploads/.gitkeep

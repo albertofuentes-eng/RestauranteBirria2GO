@@ -1,0 +1,69 @@
+@model List<OrdenDetalle>
+@{
+    var estados = (List<EstadoOrden>)ViewBag.Estados;
+    var puedeEditar = (bool)ViewBag.PuedeEditar;
+}
+<div class="row g-3">
+    @for (var i = 0; i < estados.Count; i++)
+    {
+        var estado = estados[i];
+        var siguiente = i + 1 < estados.Count ? estados[i + 1] : null;
+        var anterior = i > 0 ? estados[i - 1] : null;
+        var items = Model.Where(x => x.EstadoOrdenId == estado.Id).ToList();
+        <div class="col-md-6 col-xl-3">
+            <div class="kanban-column">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><span class="status-dot" style="background:@estado.Color"></span>@estado.Nombre</h5>
+                    <span class="badge text-bg-dark">@items.Count</span>
+                </div>
+                @foreach (var item in items)
+                {
+                    var minutos = (int)(DateTime.Now - item.Fecha).TotalMinutes;
+                    <div class="kanban-card">
+                        <div class="d-flex justify-content-between">
+                            <strong>Orden #@item.OrdenId</strong>
+                            <span class="badge text-bg-light">x@item.Cantidad</span>
+                        </div>
+                        <div class="fs-5 fw-semibold mt-1">@item.Producto?.Nombre</div>
+                        <div class="text-muted small mb-2">
+                            @if (item.Orden?.Mesa != null) { <span><i class="bi bi-table me-1"></i>Mesa @item.Orden.Mesa.Numero @(string.IsNullOrWhiteSpace(item.Orden.Cliente) ? "" : "· " + item.Orden.Cliente)</span> }
+                            else { <span><i class="bi bi-bag me-1"></i>@item.Orden?.TipoOrden?.Nombre @item.Orden?.Cliente</span> }
+                            · hace @minutos min
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(item.Nota))
+                        {
+                            <div class="alert alert-warning py-1 px-2 small mb-2"><i class="bi bi-chat-left-text me-1"></i>@item.Nota</div>
+                        }
+                        @if (puedeEditar)
+                        {
+                            <div class="d-flex gap-1 flex-wrap">
+                                @if (anterior != null)
+                                {
+                                    <form asp-action="Estado" method="post">
+                                        <input type="hidden" name="id" value="@item.Id" /><input type="hidden" name="estadoId" value="@anterior.Id" />
+                                        <button class="btn btn-sm btn-outline-secondary" title="Regresar a @anterior.Nombre"><i class="bi bi-arrow-left"></i></button>
+                                    </form>
+                                }
+                                @if (siguiente != null)
+                                {
+                                    <form asp-action="Estado" method="post">
+                                        <input type="hidden" name="id" value="@item.Id" /><input type="hidden" name="estadoId" value="@siguiente.Id" />
+                                        <button class="btn btn-sm btn-success">@siguiente.Nombre <i class="bi bi-arrow-right"></i></button>
+                                    </form>
+                                    <form asp-action="EstadoOrden" method="post">
+                                        <input type="hidden" name="ordenId" value="@item.OrdenId" /><input type="hidden" name="estadoId" value="@siguiente.Id" />
+                                        <button class="btn btn-sm btn-outline-success" title="Mover toda la orden a @siguiente.Nombre"><i class="bi bi-collection"></i></button>
+                                    </form>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                @if (items.Count == 0)
+                {
+                    <div class="text-center text-muted py-5"><i class="bi bi-check2-circle fs-1"></i><div class="small mt-2">Sin comandas</div></div>
+                }
+            </div>
+        </div>
+    }
+</div>

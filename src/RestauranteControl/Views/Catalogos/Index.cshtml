@@ -1,0 +1,160 @@
+@model List<object>
+@inject PermisoService Permisos
+@{
+    var def = (DefCatalogo)ViewBag.Def;
+    ViewData["Title"] = def.Titulo;
+    var puedeCrear = await Permisos.PuedeAsync(Modulos.Catalogos, Acciones.Crear);
+    var puedeEditar = await Permisos.PuedeAsync(Modulos.Catalogos, Acciones.Editar);
+    var puedeEliminar = await Permisos.PuedeAsync(Modulos.Catalogos, Acciones.Eliminar);
+    var idProp = def.Entidad.GetProperty("Id")!;
+    string Valor(object fila, string propiedad) => def.Entidad.GetProperty(propiedad)!.GetValue(fila)?.ToString() ?? "";
+    bool Activo(object fila) => def.CampoActivo == null || (bool)def.Entidad.GetProperty(def.CampoActivo)!.GetValue(fila)!;
+    string FilaJson(object fila)
+    {
+        var dic = new Dictionary<string, object?> { ["id"] = idProp.GetValue(fila) };
+        foreach (var c in def.Campos)
+        {
+            var v = def.Entidad.GetProperty(c.Propiedad)!.GetValue(fila);
+            dic[c.Propiedad] = c.Tipo == "bool" ? (object?)(v is bool b && b) : v?.ToString();
+        }
+        if (def.CampoActivo != null) { dic["_activo"] = Activo(fila); }
+        return System.Text.Json.JsonSerializer.Serialize(dic);
+    }
+    var vacio = new Dictionary<string, object?> { ["id"] = 0, ["_activo"] = true };
+    foreach (var c in def.Campos)
+    {
+        vacio[c.Propiedad] = c.Tipo == "bool" ? (object)false : (c.Tipo == "color" ? "#6c757d" : "");
+    }
+    var jsonVacio = System.Text.Json.JsonSerializer.Serialize(vacio);
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="page-title"><i class="bi @def.Icono me-2"></i>Catálogos</h1>
+        <p class="page-subtitle">Mantenimiento de los catálogos del sistema (alta, edición, baja).</p>
+    </div>
+    @if (puedeCrear)
+    {
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#catModal" data-fila="@jsonVacio"><i class="bi bi-plus-lg me-1"></i>Nuevo registro</button>
+    }
+</div>
+
+<ul class="nav nav-pills mb-3">
+    @foreach (var c in CatalogoRegistry.Todos)
+    {
+        <li class="nav-item"><a class="nav-link @(c.Clave == def.Clave ? "active" : "")" asp-action="Index" asp-route-tipo="@c.Clave"><i class="bi @c.Icono me-1"></i>@c.Titulo</a></li>
+    }
+</ul>
+
+<div class="card table-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    @foreach (var c in def.Campos) { <th>@c.Etiqueta</th> }
+                    @if (def.CampoActivo != null) { <th>Estado</th> }
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var fila in Model)
+            {
+                <tr>
+                    @foreach (var c in def.Campos)
+                    {
+                        <td>
+                            @if (c.Tipo == "bool")
+                            {
+                                <span class="badge @(Valor(fila, c.Propiedad) == "True" ? "text-bg-success" : "text-bg-secondary")">@(Valor(fila, c.Propiedad) == "True" ? "Sí" : "No")</span>
+                            }
+                            else if (c.Tipo == "color")
+                            {
+                                <span class="status-dot" style="background:@Valor(fila, c.Propiedad)"></span>@Valor(fila, c.Propiedad)
+                            }
+                            else
+                            {
+                                @Valor(fila, c.Propiedad)
+                            }
+                        </td>
+                    }
+                    @if (def.CampoActivo != null)
+                    {
+                        <td><span class="badge @(Activo(fila) ? "text-bg-success" : "text-bg-secondary")">@(Activo(fila) ? "Activo" : "Inactivo")</span></td>
+                    }
+                    <td class="text-end text-nowrap">
+                        @if (puedeEditar)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#catModal" data-fila="@FilaJson(fila)"><i class="bi bi-pencil"></i></button>
+                        }
+                        @if (puedeEliminar)
+                        {
+                            <form asp-action="Eliminar" method="post" class="d-inline" onsubmit="return confirm('¿Eliminar este registro?');">
+                                <input type="hidden" name="tipo" value="@def.Clave" />
+                                <input type="hidden" name="id" value="@idProp.GetValue(fila)" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+            @if (!Model.Any()) { <tr><td colspan="@(def.Campos.Length + 2)"><div class="empty-state"><i class="bi bi-inbox"></i>Sin registros.</div></td></tr> }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="catModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 rounded-4">
+            <form asp-action="Guardar" method="post">
+                <input type="hidden" name="tipo" value="@def.Clave" />
+                <input type="hidden" name="id" id="catId" />
+                <div class="modal-header"><h5 class="modal-title">@def.Titulo</h5><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    @foreach (var c in def.Campos)
+                    {
+                        if (c.Tipo == "bool")
+                        {
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input cat-campo" type="checkbox" name="@c.Propiedad" value="true" id="@("f_" + c.Propiedad)" data-prop="@c.Propiedad" data-tipo="bool" />
+                                <input type="hidden" name="@c.Propiedad" value="false" />
+                                <label class="form-check-label" for="@("f_" + c.Propiedad)">@c.Etiqueta</label>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">@c.Etiqueta</label>
+                                <input class="form-control cat-campo @(c.Tipo == "color" ? "form-control-color" : "")" type="@(c.Tipo == "int" ? "number" : c.Tipo == "color" ? "color" : "text")" name="@c.Propiedad" data-prop="@c.Propiedad" data-tipo="@c.Tipo" required />
+                            </div>
+                        }
+                    }
+                    @if (def.CampoActivo != null)
+                    {
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="@def.CampoActivo" value="true" id="catActivo" />
+                            <input type="hidden" name="@def.CampoActivo" value="false" />
+                            <label class="form-check-label" for="catActivo">Activo</label>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('catModal').addEventListener('show.bs.modal', function (ev) {
+            var d = JSON.parse(ev.relatedTarget.getAttribute('data-fila'));
+            document.getElementById('catId').value = d.id;
+            document.querySelectorAll('#catModal .cat-campo').forEach(function (el) {
+                var v = d[el.getAttribute('data-prop')];
+                if (el.getAttribute('data-tipo') === 'bool') el.checked = (v === true || v === 'True');
+                else el.value = (v === null || v === undefined) ? '' : v;
+            });
+            var act = document.getElementById('catActivo');
+            if (act) act.checked = d._activo !== false;
+        });
+    </script>
+}
